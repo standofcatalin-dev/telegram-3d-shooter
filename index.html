@@ -1,23 +1,349 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Шутер - Telegram</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Platformer + NPC</title>
+  <style>
+    html, body {
+      margin: 0;
+      overflow: hidden;
+      background: #0f172a;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    #hud {
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      background: rgba(0, 0, 0, 0.38);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.6;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    #crosshair {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 11;
+    }
+
+    #crosshair::before, #crosshair::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255,255,255,0.9);
+    }
+
+    #crosshair::before {
+      width: 2px;
+      height: 14px;
+    }
+
+    #crosshair::after {
+      width: 14px;
+      height: 2px;
+    }
+  </style>
 </head>
 <body>
-    <div id="game-container"></div>
-    <div id="hud">
-        <div id="speed-info">Скорость: <span id="speed-value">0</span></div>
-        <div id="controls-info">
-            WASD - движение | Space - прыжок | Мышь - поворот | Клик - выстрел
-        </div>
-    </div>
+  <div id="hud">
+    WASD — ходьба<br>
+    Space — прыжок<br>
+    Mouse — камера
+  </div>
+  <div id="crosshair"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="js/player.js"></script>
-    <script src="js/world.js"></script>
-    <script src="js/game.js"></script>
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b1d2d);
+    scene.fog = new THREE.Fog(0x0b1d2d, 20, 100);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 2, 8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x1a1a1a, 1.1);
+    scene.add(hemi);
+
+    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+    dir.position.set(15, 20, 12);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(1024, 1024);
+    scene.add(dir);
+
+    // ===== Площадка =====
+    const ground = new THREE.Mesh(
+      new THREE.BoxGeometry(50, 1.5, 50),
+      new THREE.MeshStandardMaterial({ color: 0x2f4f4f, roughness: 0.9 })
+    );
+    ground.position.y = -0.75;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const platforms = [];
+
+    function createPlatform(x, y, z, w = 6, h = 1, d = 6, color = 0x8d6e63) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.8 })
+      );
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      platforms.push({ mesh, w, h, d });
+    }
+
+    createPlatform(0, 1.2, 0, 8, 1, 8, 0x7d5a4a);
+    createPlatform(-9, 3.2, -5, 7, 1, 7, 0x6b4f3e);
+    createPlatform(12, 5.2, -8, 7, 1, 7, 0x5f433a);
+    createPlatform(15, 8.2, 7, 8, 1, 8, 0x7b5d4a);
+    createPlatform(-15, 6.2, 10, 8, 1, 8, 0x654d41);
+
+    // ===== Игрок =====
+    const player = new THREE.Group();
+
+    const playerBody = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.6, 1.2, 6, 12),
+      new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.6 })
+    );
+    playerBody.castShadow = true;
+    player.add(playerBody);
+
+    const playerHead = new THREE.Mesh(
+      new THREE.SphereGeometry(0.38, 18, 18),
+      new THREE.MeshStandardMaterial({ color: 0xf5d0a9 })
+    );
+    playerHead.position.y = 1.2;
+    playerHead.castShadow = true;
+    player.add(playerHead);
+
+    player.position.set(0, 2.2, 8);
+    scene.add(player);
+
+    // ===== NPC =====
+    const npc = new THREE.Group();
+
+    const npcBody = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.55, 1.2, 6, 12),
+      new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.7 })
+    );
+    npcBody.castShadow = true;
+    npc.add(npcBody);
+
+    const npcHead = new THREE.Mesh(
+      new THREE.SphereGeometry(0.35, 18, 18),
+      new THREE.MeshStandardMaterial({ color: 0xf3d5b5 })
+    );
+    npcHead.position.y = 1.15;
+    npcHead.castShadow = true;
+    npc.add(npcHead);
+
+    npc.position.set(-6, 2.1, 0);
+    scene.add(npc);
+
+    const npcState = {
+      velocityY: 0,
+      grounded: false,
+      speed: 4.5
+    };
+
+    // ===== Управление =====
+    const pointer = { yaw: 0, pitch: 0 };
+    const keys = {};
+
+    const playerState = {
+      velocityY: 0,
+      grounded: false,
+      speed: 8,
+      jumpForce: 9,
+      gravity: 22
+    };
+
+    document.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+    });
+
+    document.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (document.pointerLockElement === document.body) {
+        pointer.yaw -= e.movementX * 0.0022;
+        pointer.pitch -= e.movementY * 0.0018;
+        pointer.pitch = Math.max(-1.3, Math.min(1.3, pointer.pitch));
+      }
+    });
+
+    renderer.domElement.addEventListener('click', () => {
+      document.body.requestPointerLock();
+    });
+
+    // ===== Движение игрока =====
+    function updatePlayer(delta) {
+      const forward = new THREE.Vector3(Math.sin(pointer.yaw), 0, Math.cos(pointer.yaw));
+      const right = new THREE.Vector3(forward.z, 0, -forward.x);
+
+      let moveX = 0;
+      let moveZ = 0;
+
+      if (keys.KeyW) moveZ += 1;
+      if (keys.KeyS) moveZ -= 1;
+      if (keys.KeyA) moveX -= 1;
+      if (keys.KeyD) moveX += 1;
+
+      if (moveX !== 0 || moveZ !== 0) {
+        const dir = new THREE.Vector3();
+        dir.addScaledVector(forward, moveZ);
+        dir.addScaledVector(right, moveX);
+        dir.normalize();
+
+        const step = playerState.speed * delta;
+        player.position.x += dir.x * step;
+        player.position.z += dir.z * step;
+      }
+
+      if (keys.Space && playerState.grounded) {
+        playerState.velocityY = playerState.jumpForce;
+        playerState.grounded = false;
+      }
+
+      playerState.velocityY -= playerState.gravity * delta;
+      player.position.y += playerState.velocityY * delta;
+
+      playerState.grounded = false;
+
+      for (const p of platforms) {
+        const top = p.mesh.position.y + p.h / 2 + 1.3;
+        const dx = Math.abs(player.position.x - p.mesh.position.x);
+        const dz = Math.abs(player.position.z - p.mesh.position.z);
+        const halfW = p.w / 2 + 0.6;
+        const halfD = p.d / 2 + 0.6;
+
+        if (dx < halfW && dz < halfD) {
+          if (player.position.y <= top && player.position.y >= p.mesh.position.y - 1) {
+            if (playerState.velocityY <= 0) {
+              player.position.y = top;
+              playerState.velocityY = 0;
+              playerState.grounded = true;
+            }
+          }
+        }
+      }
+
+      if (player.position.y <= 1.2) {
+        player.position.y = 1.2;
+        playerState.velocityY = 0;
+        playerState.grounded = true;
+      }
+
+      player.position.x = THREE.MathUtils.clamp(player.position.x, -22, 22);
+      player.position.z = THREE.MathUtils.clamp(player.position.z, -22, 22);
+    }
+
+    // ===== NPC AI: идёт за игроком =====
+    function updateNPC(delta) {
+      const toPlayer = new THREE.Vector3();
+      toPlayer.subVectors(player.position, npc.position);
+
+      const distance = toPlayer.length();
+
+      if (distance > 1.3) {
+        toPlayer.normalize();
+        npc.position.x += toPlayer.x * npcState.speed * delta;
+        npc.position.z += toPlayer.z * npcState.speed * delta;
+      }
+
+      npc.lookAt(player.position.x, npc.position.y + 1, player.position.z);
+
+      npcState.velocityY -= 22 * delta;
+      npc.position.y += npcState.velocityY * delta;
+
+      npcState.grounded = false;
+
+      for (const p of platforms) {
+        const top = p.mesh.position.y + p.h / 2 + 1.2;
+        const dx = Math.abs(npc.position.x - p.mesh.position.x);
+        const dz = Math.abs(npc.position.z - p.mesh.position.z);
+        const halfW = p.w / 2 + 0.6;
+        const halfD = p.d / 2 + 0.6;
+
+        if (dx < halfW && dz < halfD) {
+          if (npc.position.y <= top && npc.position.y >= p.mesh.position.y - 1) {
+            if (npcState.velocityY <= 0) {
+              npc.position.y = top;
+              npcState.velocityY = 0;
+              npcState.grounded = true;
+            }
+          }
+        }
+      }
+
+      if (npc.position.y <= 1.2) {
+        npc.position.y = 1.2;
+        npcState.velocityY = 0;
+        npcState.grounded = true;
+      }
+    }
+
+    // ===== Камера =====
+    function updateCamera() {
+      camera.position.x = player.position.x - Math.sin(pointer.yaw) * 6;
+      camera.position.z = player.position.z - Math.cos(pointer.yaw) * 6;
+      camera.position.y = player.position.y + 2.0 + Math.sin(pointer.pitch) * 2.2;
+
+      const lookTarget = new THREE.Vector3(
+        player.position.x + Math.sin(pointer.yaw) * 8,
+        player.position.y + 1.5,
+        player.position.z + Math.cos(pointer.yaw) * 8
+      );
+
+      camera.lookAt(lookTarget);
+    }
+
+    // ===== Анимация =====
+    let last = 0;
+
+    function animate(ts) {
+      const delta = Math.min((ts - last) / 1000, 0.033);
+      last = ts;
+
+      updatePlayer(delta);
+      updateNPC(delta);
+      updateCamera();
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    requestAnimationFrame(animate);
+  </script>
 </body>
 </html>
