@@ -1,0 +1,71 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #111827;
+  font-family: Arial, sans-serif;
+  color: white;
+}
+
+#gameContainer {
+  width: 100vw;
+  height: 100vh;
+}
+
+#crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
+}
+
+#crosshair::before, #crosshair::after {
+  content: "";
+  position: absolute;
+  background: rgba(255, 255, 255, 0.9);
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#crosshair::before {
+  width: 2px;
+  height: 14px;
+}
+
+#crosshair::after {
+  width: 14px;
+  height: 2px;
+}
+
+#hud {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  backdrop-filter: blur(4px);
+  z-index: 20;
+  line-height: 1.6;
+}
+
+#stats {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  backdrop-filter: blur(4px);
+  z-index: 20;
+  font-family: monospace;
+  line-height: 1.8;
+}
